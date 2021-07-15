@@ -28,7 +28,8 @@ def loadAugImages(path):
     noOfMarkers = len(myList)
     augDics = {}
     for imgPath in myList:
-        key = int(os.path.splitext(imgPath)[0])
+        filename = os.path.splitext(imgPath)[0]
+        key = filename if filename == 'generic' else int(filename)
         imgAug = cv2.imread(f'{path}/{imgPath}')
         augDics[key] = imgAug
     return augDics
@@ -84,7 +85,10 @@ def monitor_video_stream(rtsp_url, arucoDict, arucoParams, GAP_SECONDS=20):
         arucoFound = findArucoMarkers(frame, markerSize=5, totalMarkers=250)
         if len(arucoFound[0]) != 0:
             for bbox, id in zip(arucoFound[0], arucoFound[1]):
-                frame = augmentAruco(bbox, id, frame, augDics[int(id)])
+                if int(id) in augDics.keys():
+                    frame = augmentAruco(bbox, id, frame, augDics[int(id)])
+                else:
+                    frame = augmentAruco(bbox, id, frame, augDics['generic'])
                 ts = datetime.datetime.now()
                 tsarr = ts.year,ts.month,ts.day,ts.hour,ts.minute,ts.second
                 ARcode = id[0]
