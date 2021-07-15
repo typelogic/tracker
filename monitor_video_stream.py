@@ -1,11 +1,27 @@
 # import the necessary packages
-import time, datetime, sys, os, argparse
+import datetime, sys, os, argparse
 from imutils.video import VideoStream
 import numpy as np
 import imutils
 import cv2
 
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp"
+
+def gap_seconds(t0, t1):
+    string1 = f'{t0[0]}/{t0[1]}/{t0[2]}T{t0[3]}:{t0[4]}:{t0[5]}'
+    string2 = f'{t1[0]}/{t1[1]}/{t1[2]}T{t1[3]}:{t1[4]}:{t1[5]}'
+    a = datetime.datetime.strptime(string1, "%Y/%m/%dT%H:%M:%S")
+    b = datetime.datetime.strptime(string2, "%Y/%m/%dT%H:%M:%S")
+    gap = abs((a - b)).seconds
+    return gap
+
+now = datetime.datetime.now()
+d1 = now.year, now.month, now.day, now.hour, now.minute, now.second
+now = datetime.datetime.now()
+d2 = now.year, now.month, now.day, now.hour, now.minute, now.second
+
+g = gap_seconds(d1, d2)
+print(g)
 
 def loadAugImages(path):
     myList = os.listdir(path)
@@ -43,7 +59,10 @@ def augmentAruco(bbox, ids, img, imgAug, drawId=True):
         cv2.putText(imgOut, str(ids), tl, cv2.FONT_HERSHEY_PLAIN, 2, (0,0,255), 2)
     return imgOut
 
-def monitor_video_stream(rtsp_url, arucoDict, arucoParams):
+def monitor_video_stream(rtsp_url, arucoDict, arucoParams, GAP_SECONDS=20):
+    seendict = {}
+    now = datetime.datetime.now()
+    timestamp = f'{now.year}.{now.month}.{now.day}T{now.hour}:{now.minute}'
     arucoDict = cv2.aruco.Dictionary_get(ARUCO_DICT[args["type"]])
     arucoParams = cv2.aruco.DetectorParameters_create()
     vs = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
@@ -54,8 +73,8 @@ def monitor_video_stream(rtsp_url, arucoDict, arucoParams):
     # Set playback FPS to 24
     fps = 24
     fourcc = cv2.VideoWriter_fourcc("X", "V", "I", "D")
-    writer = cv2.VideoWriter("records/record.avi", fourcc, fps, (width, height))
-    seenlog = open("records/record.log","w")
+    writer = cv2.VideoWriter(f"records/record-{timestamp}.avi", fourcc, fps, (width, height))
+    seenlog = open(f"records/record-{timestamp}.log","w")
     augDics = loadAugImages("images")
 
     while True:
@@ -66,8 +85,17 @@ def monitor_video_stream(rtsp_url, arucoDict, arucoParams):
         if len(arucoFound[0]) != 0:
             for bbox, id in zip(arucoFound[0], arucoFound[1]):
                 frame = augmentAruco(bbox, id, frame, augDics[int(id)])
-                now = datetime.datetime.now()
-                seenlog.write(f'{id[0]},{now.year}/{now.month}/{now.day}T{now.hour}:{now.minute}:{now.second}\n')
+                ts = datetime.datetime.now()
+                tsarr = ts.year,ts.month,ts.day,ts.hour,ts.minute,ts.second
+                ARcode = id[0]
+                if ARcode in seendict:
+                    lastseen = seendict[ARcode][-1]
+                    if gap_seconds(lastseen, tsarr) > GAP_SECONDS:
+                        seendict[ARcode].append(tsarr)
+                        seenlog.write(f'{ARcode},{tsarr[0]}/{tsarr[1]}/{tsarr[2]}T{tsarr[3]}:{tsarr[4]}:{tsarr[5]}\n')
+                else:
+                    seendict[ARcode] = [tsarr]
+                    seenlog.write(f'{ARcode},{tsarr[0]}/{tsarr[1]}/{tsarr[2]}T{tsarr[3]}:{tsarr[4]}:{tsarr[5]}\n')
         # show the output frame
         cv2.imshow("Frame", frame)
         writer.write(frame)
